@@ -129,11 +129,13 @@ def test_handle_connect_sqlite_success(clean_state, tmp_path):
     )
     assert "Connected to Sqlite" in st
     assert db_name == db_file
-    assert "3 tables" in tbl_cnt
+    assert "5 tables" in tbl_cnt
     assert new_state["is_connected"] is True
     assert new_state["dialect"] == "sqlite"
     assert "departments" in new_state["table_names"]
     assert "employees" in new_state["table_names"]
+    assert "customers" in new_state["table_names"]
+    assert "products" in new_state["table_names"]
     assert "sales" in new_state["table_names"]
     assert "CREATE TABLE employees" in new_state["schema"]
     assert "Connected successfully" in logs
@@ -221,7 +223,7 @@ def test_handle_load_sample(clean_state):
     assert db_type_menu == "SQLite"
     assert "sample_company.db" in db_name
     assert state["is_connected"] is True
-    assert state["table_count"] == 3
+    assert state["table_count"] == 5
 
 
 def test_handle_generate_sql_disconnected(clean_state):

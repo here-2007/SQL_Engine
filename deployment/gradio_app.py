@@ -405,60 +405,133 @@ BANNER_DISMISS_HEAD = f"<script>{BANNER_DISMISS_SCRIPT}</script>"
 # Database Utilities & Fixtures
 # ---------------------------------------------------------------------------
 
-def create_sample_sqlite_db(path: str = SAMPLE_DB_PATH) -> str:
+def create_sample_sqlite_db(path: str = SAMPLE_DB_PATH, force_recreate: bool = False) -> str:
     """Creates a realistic SQLite database fixture for immediate testing."""
-    if os.path.exists(path) and os.path.getsize(path) > 0:
-        return path
+    if not force_recreate and os.path.exists(path) and os.path.getsize(path) > 0:
+        try:
+            conn = sqlite3.connect(path)
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(sales);")
+            cols = [row[1] for row in cur.fetchall()]
+            cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table';")
+            tbl_count = cur.fetchone()[0]
+            conn.close()
+            if "department_id" in cols and "name" in cols and tbl_count >= 5:
+                return path
+        except Exception:
+            pass
+
+    parent_dir = os.path.dirname(path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
 
     conn = sqlite3.connect(path)
     cur = conn.cursor()
+
+    cur.execute("DROP TABLE IF EXISTS sales;")
+    cur.execute("DROP TABLE IF EXISTS products;")
+    cur.execute("DROP TABLE IF EXISTS employees;")
+    cur.execute("DROP TABLE IF EXISTS customers;")
+    cur.execute("DROP TABLE IF EXISTS departments;")
+
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS departments (
+        CREATE TABLE departments (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            location TEXT NOT NULL
+            location TEXT NOT NULL,
+            budget REAL
         );
     """)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS employees (
+        CREATE TABLE employees (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
+            email TEXT,
             department_id INTEGER,
+            role TEXT,
             salary REAL NOT NULL,
             hire_date DATE,
             FOREIGN KEY (department_id) REFERENCES departments (id)
         );
     """)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS sales (
+        CREATE TABLE customers (
             id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            industry TEXT,
+            city TEXT
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE products (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT,
+            price REAL NOT NULL,
+            department_id INTEGER,
+            FOREIGN KEY (department_id) REFERENCES departments (id)
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE sales (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
             employee_id INTEGER,
+            department_id INTEGER,
+            customer_id INTEGER,
+            product_id INTEGER,
             amount REAL NOT NULL,
             sale_date DATE,
-            FOREIGN KEY (employee_id) REFERENCES employees (id)
+            FOREIGN KEY (employee_id) REFERENCES employees (id),
+            FOREIGN KEY (department_id) REFERENCES departments (id),
+            FOREIGN KEY (customer_id) REFERENCES customers (id),
+            FOREIGN KEY (product_id) REFERENCES products (id)
         );
     """)
 
-    cur.executemany("INSERT OR IGNORE INTO departments VALUES (?, ?, ?);", [
-        (1, "Engineering", "San Francisco"),
-        (2, "Sales", "New York"),
-        (3, "Marketing", "London"),
-        (4, "Product", "Seattle"),
+    cur.executemany("INSERT INTO departments VALUES (?, ?, ?, ?);", [
+        (1, "Engineering", "San Francisco", 2500000.0),
+        (2, "Sales", "New York", 1800000.0),
+        (3, "Marketing", "London", 1200000.0),
+        (4, "Product", "Seattle", 950000.0),
+        (5, "Customer Support", "Austin", 600000.0),
     ])
-    cur.executemany("INSERT OR IGNORE INTO employees VALUES (?, ?, ?, ?, ?);", [
-        (101, "Alice Chen", 1, 135000.0, "2021-03-15"),
-        (102, "Bob Smith", 1, 115000.0, "2022-06-01"),
-        (103, "Charlie Davis", 2, 88000.0, "2020-01-10"),
-        (104, "Diana Prince", 2, 94000.0, "2021-11-20"),
-        (105, "Evan Wright", 3, 76000.0, "2023-02-14"),
-        (106, "Fiona Gallagher", 4, 120000.0, "2022-08-19"),
+    cur.executemany("INSERT INTO employees VALUES (?, ?, ?, ?, ?, ?, ?);", [
+        (101, "Alice Chen", "alice@company.com", 1, "Staff Software Engineer", 135000.0, "2021-03-15"),
+        (102, "Bob Smith", "bob@company.com", 1, "Senior Backend Engineer", 115000.0, "2022-06-01"),
+        (103, "Charlie Davis", "charlie@company.com", 2, "Senior Account Executive", 88000.0, "2020-01-10"),
+        (104, "Diana Prince", "diana@company.com", 2, "Enterprise Sales Director", 94000.0, "2021-11-20"),
+        (105, "Evan Wright", "evan@company.com", 3, "Growth Marketing Lead", 76000.0, "2023-02-14"),
+        (106, "Fiona Gallagher", "fiona@company.com", 4, "Principal Product Manager", 120000.0, "2022-08-19"),
+        (107, "George Miller", "george@company.com", 5, "Support Lead", 72000.0, "2023-05-10"),
+        (108, "Hannah Abbott", "hannah@company.com", 2, "Sales Representative", 78000.0, "2024-01-15"),
+        (109, "Ian Malcolm", "ian@company.com", 1, "Data Platform Engineer", 118000.0, "2023-09-01"),
+        (110, "Julia Roberts", "julia@company.com", 4, "UI/UX Design Lead", 110000.0, "2021-07-22"),
     ])
-    cur.executemany("INSERT OR IGNORE INTO sales VALUES (?, ?, ?, ?);", [
-        (1, 103, 16500.0, "2024-01-15"),
-        (2, 104, 24000.0, "2024-02-10"),
-        (3, 103, 19500.0, "2024-03-05"),
-        (4, 104, 32000.0, "2024-03-22"),
-        (5, 103, 14200.0, "2024-04-12"),
+    cur.executemany("INSERT INTO customers VALUES (?, ?, ?, ?);", [
+        (1, "Acme Corp", "Technology", "San Francisco"),
+        (2, "Globex International", "Manufacturing", "Chicago"),
+        (3, "Soylent Health", "Healthcare", "Boston"),
+        (4, "Initech Systems", "Finance", "New York"),
+        (5, "Umbrella Labs", "Biotech", "London"),
+    ])
+    cur.executemany("INSERT INTO products VALUES (?, ?, ?, ?, ?);", [
+        (1, "Cloud Data Warehouse", "Software", 50000.0, 1),
+        (2, "AI Analytics Suite", "Software", 75000.0, 1),
+        (3, "Enterprise Support Plan", "Services", 25000.0, 5),
+        (4, "Security Audit Package", "Services", 35000.0, 1),
+        (5, "API Gateway License", "Software", 15000.0, 1),
+    ])
+    cur.executemany("INSERT INTO sales VALUES (?, ?, ?, ?, ?, ?, ?, ?);", [
+        (1, "Enterprise Cloud Migration", 103, 2, 1, 1, 50000.0, "2024-01-15"),
+        (2, "Global AI Analytics Rollout", 104, 2, 2, 2, 75000.0, "2024-02-10"),
+        (3, "Premium Support Tier Agreement", 107, 5, 3, 3, 25000.0, "2024-03-05"),
+        (4, "Financial Compliance Security Suite", 104, 2, 4, 4, 35000.0, "2024-03-22"),
+        (5, "Infrastructure API Modernization", 103, 2, 5, 5, 15000.0, "2024-04-12"),
+        (6, "Mid-Market Analytics Deployment", 108, 2, 1, 2, 45000.0, "2024-05-18"),
+        (7, "Executive Advisory Retainer", 104, 2, 4, 3, 30000.0, "2024-06-01"),
+        (8, "Enterprise SLA Extension", 107, 5, 2, 3, 20000.0, "2024-06-15"),
+        (9, "Developer Cloud Add-on", 102, 1, 5, 1, 28000.0, "2024-07-01"),
     ])
     conn.commit()
     conn.close()
